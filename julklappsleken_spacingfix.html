@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    <title>Julklappsleken</title>
+    <style>
+html, body { height: 100%; margin: 0; padding: 0; background-color: lightgrey; }
+body { font-family: Arial, sans-serif; }
+button { background-color: darkred; color: white; margin: 5px; }
+.button-grayed { background-color: #ccc; color: #333; }
+
+.popup {
+    display: none;
+    position: fixed;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    background-color: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+.small-gray {
+    color: gray;
+    font-size: 0.85em;
+    margin-top: -8px; /* mindre radavstånd */
+}
+
+#gameNumber { text-align: right; margin-right: 20px; }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <div class="grid">
+            <section>
+                <hgroup>
+                    <h2>Välkommen till Julklappsleken!</h2>
+                    <h3>VIKTIGT: Ange kod 24 för att bli tilldelad rätt personer!</h3>
+                </hgroup>
+
+                <p>
+                    Varje person kommer att få två personer att köpa julklapp till.<br>
+                    Du kan lägga max 350 kr per mottagare.<br>
+                    Om de givare som blivit tilldelade samma person <em>väljer</em> att köpa en gemensam present får de lägga max 700 kr tillsammans.<br>
+                    Man ska fortfarande köpa till båda sina tilldelade mottagare.
+                </p>
+
+                <div id="gameNumber">Aktiv kod: 0</div>
+
+                <input type="number" id="seedInput" placeholder="Ange kod här" value="24">
+                <button id="startGameButton">Starta nytt spel</button>
+                <div id="whoAreYouText" style="display:none; margin-top:20px;">Vem är du?</div>
+                <div id="names" style="display:none; margin-top:10px;"></div>
+            </section>
+        </div>
+    </main>
+
+    <div id="confirmPopup" class="popup"></div>
+
+    <div id="assignmentPopup" class="popup">
+        <p id="assignmentText"></p>
+        <button onclick="closePopup('assignmentPopup')">Stäng</button>
+    </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/seedrandom/2.4.4/seedrandom.min.js"></script>
+<script>
+const participants = ['Cindra','Kim','Zina','Lisbeth','Peter','Classe','Elsa','Barry','Kristina','Cloud'];
+
+let assignments = {};
+let buyersFor = {};
+let currentGiver = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('startGameButton').addEventListener('click', startGame);
+});
+
+function startGame() {
+    const seed = document.getElementById('seedInput').value.trim();
+    if (!seed) { alert('Ange en kod först.'); return; }
+
+    const prng = new Math.seedrandom(seed);
+    const hiddenOrder = shuffleArray([...participants], prng);
+    const visibleOrder = shuffleArray([...participants], prng);
+
+    generateAssignments(hiddenOrder);
+    displayButtons(visibleOrder);
+
+    document.getElementById('gameNumber').innerText = `Aktiv kod: ${seed}`;
+    document.getElementById('startGameButton').classList.add('button-grayed');
+    document.getElementById('whoAreYouText').style.display = 'block';
+}
+
+function shuffleArray(array, prng) {
+    let i = array.length;
+    while (i !== 0) {
+        const r = Math.floor(prng() * i);
+        i--;
+        [array[i], array[r]] = [array[r], array[i]];
+    }
+    return array;
+}
+
+function generateAssignments(order) {
+    assignments = {};
+    buyersFor = {};
+    order.forEach(n => buyersFor[n] = []);
+    const n = order.length;
+    for (let i = 0; i < n; i++) {
+        const giver = order[i];
+        const r1 = order[(i + 1) % n];
+        const r2 = order[(i + 3) % n];
+        assignments[giver] = { recipients: [r1, r2] };
+        buyersFor[r1].push(giver);
+        buyersFor[r2].push(giver);
+    }
+}
+
+function displayButtons(order) {
+    const div = document.getElementById('names');
+    div.innerHTML = '';
+    order.forEach(name => {
+        const b = document.createElement('button');
+        b.innerText = name;
+        b.onclick = () => { currentGiver = name; confirmSelection(); };
+        div.appendChild(b);
+    });
+    div.style.display = 'block';
+}
+
+function confirmSelection() {
+    const popup = document.getElementById('confirmPopup');
+    popup.innerHTML = `
+        <p>Jag bekräftar att jag är <strong>${currentGiver}</strong> och att jag vill se mina mottagare.</p>
+        <button onclick="showAssignment()">Fortsätt</button>
+        <button onclick="closePopup('confirmPopup')">Avbryt</button>
+    `;
+    popup.style.display = 'block';
+}
+
+function showAssignment() {
+    const [r1, r2] = assignments[currentGiver].recipients;
+
+    const co1 = buyersFor[r1].filter(n => n !== currentGiver);
+    const co2 = buyersFor[r2].filter(n => n !== currentGiver);
+
+    let co1Text = co1.length ? `<div class='small-gray'>(${co1.join(' och ')} köper också till ${r1})</div>` : "";
+    let co2Text = co2.length ? `<div class='small-gray'>(${co2.join(' och ')} köper också till ${r2})</div>` : "";
+
+    const a = document.getElementById('assignmentText');
+    a.innerHTML = `
+        <p><strong>${currentGiver}</strong>, du ska köpa julklappar till:</p>
+
+        <p style="margin-bottom:4px;">${r1}</p>
+        ${co1Text}
+
+        <br>
+
+        <p style="margin-bottom:4px;">${r2}</p>
+        ${co2Text}
+    `;
+
+    closePopup('confirmPopup');
+    document.getElementById('assignmentPopup').style.display = 'block';
+}
+
+function closePopup(id) {
+    document.getElementById(id).style.display = 'none';
+}
+</script>
+</body>
+</html>

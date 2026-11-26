@@ -129,6 +129,17 @@
         // Deltagarordningen är en del av lottningen och ska vara fast för denna version.
         const participants = ['Barry', 'Cindra', 'Cloud', 'Kim', 'Kristina', 'Lisbeth', 'Peter', 'Zina'];
         const nameCount = participants.length;
+
+        // Tilldelningar från kod 24 år 2025 där båda mottagarna deltar även i år.
+        const previousPairs = new Map([
+            ["Cindra", ["Kim","Kristina"]],
+            ["Cloud", ["Lisbeth","Zina"]],
+            ["Kristina", ["Barry","Zina"]],
+            ["Lisbeth", ["Kim","Peter"]]
+        ]);
+        const previousRecipientPairs = participants.map(giver =>
+            previousPairs.get(giver)?.map(recipient => participants.indexOf(recipient))
+        );
         const names = document.getElementById('names');
         const codeForm = document.getElementById('code-form');
         const codeInput = document.getElementById('draw-code');
@@ -149,20 +160,19 @@
             return BigInt(digits);
         }
 
-        function drawRank(seed, numberOfDraws) {
+        function* drawRanks(seed, numberOfDraws) {
             // SplitMix64. Avvisa den sista ofullständiga gruppen före modulo.
             const range = 1n << 64n;
             const choices = BigInt(numberOfDraws);
             const limit = range - range % choices;
             let state = seed;
-            let value;
-            do {
+            while (true) {
                 state = BigInt.asUintN(64, state + 0x9e3779b97f4a7c15n);
-                value = BigInt.asUintN(64, (state ^ (state >> 30n)) * 0xbf58476d1ce4e5b9n);
+                let value = BigInt.asUintN(64, (state ^ (state >> 30n)) * 0xbf58476d1ce4e5b9n);
                 value = BigInt.asUintN(64, (value ^ (value >> 27n)) * 0x94d049bb133111ebn);
                 value ^= value >> 31n;
-            } while (value >= limit);
-            return Number(value % choices);
+                if (value < limit) yield Number(value % choices);
+            }
         }
 
         const recipientPairs = participants.map((_, giver) => {
@@ -216,9 +226,20 @@
             return assignments;
         }
 
-        function buildDraw(code) {
+        function assignmentsForCode(code) {
             const numberOfDraws = countCompletions(0, Array(nameCount).fill(2));
-            const assignments = assignmentsAt(drawRank(code, numberOfDraws));
+            for (const rank of drawRanks(code, numberOfDraws)) {
+                const assignments = assignmentsAt(rank);
+                const repeatsPair = assignments.some(([first, second], giver) => {
+                    const previousPair = previousRecipientPairs[giver];
+                    return previousPair?.[0] === first && previousPair?.[1] === second;
+                });
+                if (!repeatsPair) return assignments;
+            }
+        }
+
+        function buildDraw(code) {
+            const assignments = assignmentsForCode(code);
             const buyers = participants.map(() => []);
             assignments.forEach((pair, giver) => pair.forEach(recipient => buyers[recipient].push(giver)));
             return new Map(assignments.map((pair, giver) => [

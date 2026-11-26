@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Julklappsleken 2026</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: system-ui, sans-serif;
+            color: #302522;
+            background: #f6f2ed;
+            --red: #821f2a;
+            --dark-red: #64151f;
+            --line: #e8dcd5;
+            --muted: #64554e;
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        body { margin: 0; }
+        main {
+            width: min(100% - 2rem, 37rem);
+            margin: clamp(1rem, 7vh, 4rem) auto;
+            padding: clamp(1rem, 5vw, 2.25rem);
+            border: 1px solid var(--line);
+            border-top: .35rem solid var(--red);
+            border-radius: 1rem;
+            background: #fffdfa;
+        }
+        h1, h2 { line-height: 1.2; margin: 0 0 .75rem; }
+        h1 { color: var(--red); font-size: clamp(1.7rem, 5vw, 2.5rem); }
+        h2 { font-size: 1.3rem; }
+        p { line-height: 1.55; margin: 0 0 1rem; }
+        .code-form { margin-bottom: 1.25rem; }
+        .code-form label { display: block; margin-bottom: .3rem; font-weight: 650; }
+        .code-form input {
+            min-width: 0;
+            flex: 1 1 9rem;
+            padding: .55rem .75rem;
+            border: 1px solid #9b857c;
+            border-radius: .5rem;
+            font: inherit;
+        }
+        .code-form input:focus-visible { outline: 3px solid #126468; outline-offset: 3px; }
+        .code-message { margin-top: .6rem; color: var(--muted); }
+        [hidden] { display: none !important; }
+        .names {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(7.25rem, 1fr));
+            gap: .6rem;
+        }
+        button {
+            min-height: 2.75rem;
+            padding: .55rem .9rem;
+            border: 1px solid var(--red);
+            border-radius: .5rem;
+            color: white;
+            background: var(--red);
+            font: inherit;
+            font-weight: 650;
+            cursor: pointer;
+        }
+        button:hover { background: var(--dark-red); }
+        button:focus-visible { outline: 3px solid #126468; outline-offset: 3px; }
+        .secondary { background: transparent; color: var(--red); }
+        .secondary:hover { background: #f9efed; }
+        dialog {
+            width: min(100% - 2rem, 27rem);
+            max-height: calc(100% - 2rem);
+            padding: 1.3rem;
+            border: 1px solid var(--line);
+            border-radius: .85rem;
+            background: #fffdfa;
+            color: inherit;
+        }
+        dialog::backdrop { background: rgb(37 24 22 / 55%); }
+        .actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+        .recipients { list-style: none; padding: 0; margin: 0 0 1rem; }
+        .recipients li {
+            display: grid;
+            gap: .2rem;
+            padding: .65rem .8rem;
+            margin-bottom: .5rem;
+            background: #f8efeb;
+            border-radius: .5rem;
+        }
+        .co-buyer { color: var(--muted); font-size: .9rem; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Julklappsleken 2026</h1>
+        <p>Du köper julklappar till två personer. Du får lägga <strong>högst 350 kr på varje person</strong>.</p>
+        <p>Du och den andra köparen kan gå ihop om en julklapp till den ni båda köper till. Då får julklappen kosta <strong>högst 700 kr</strong>, och din del är högst 350 kr.</p>
+        <form class="code-form" id="code-form">
+            <label for="draw-code">Gemensam kod</label>
+            <div class="actions">
+                <input id="draw-code" type="text" inputmode="numeric" value="24" autocomplete="off" aria-describedby="code-help">
+                <button type="submit">Använd koden</button>
+            </div>
+            <p class="code-message" id="code-help">Använd kod <strong>24</strong> för årets lottning. Koden är redan ifylld.</p>
+            <p id="draw-error" role="alert" hidden></p>
+        </form>
+        <section id="participant-section" aria-labelledby="participant-title" hidden>
+            <h2 id="participant-title">Vem är du?</h2>
+            <p id="active-code" role="status"></p>
+            <div class="names" id="names"></div>
+        </section>
+        <noscript><p>Aktivera JavaScript i webbläsaren för att se din lottning.</p></noscript>
+    </main>
+
+    <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+        <h2 id="confirm-title">Bekräfta ditt namn</h2>
+        <p>Vill du visa vilka <strong id="selected-name"></strong> ska köpa julklappar till?</p>
+        <div class="actions">
+            <button id="show-recipients" type="button">Visa mottagare</button>
+            <form method="dialog">
+                <button class="secondary" autofocus>Avbryt</button>
+            </form>
+        </div>
+    </dialog>
+
+    <dialog id="result-dialog" aria-labelledby="result-title">
+        <h2 id="result-title"></h2>
+        <ul class="recipients" id="recipients"></ul>
+        <form method="dialog"><button autofocus>Stäng</button></form>
+    </dialog>
+
+    <script>
+        // Deltagarordningen är en del av lottningen och ska vara fast för denna version.
+        const participants = ['Barry', 'Cindra', 'Cloud', 'Kim', 'Kristina', 'Lisbeth', 'Peter', 'Zina'];
+        const nameCount = participants.length;
+        const names = document.getElementById('names');
+        const codeForm = document.getElementById('code-form');
+        const codeInput = document.getElementById('draw-code');
+        const codeError = document.getElementById('draw-error');
+        const participantSection = document.getElementById('participant-section');
+        const confirmDialog = document.getElementById('confirm-dialog');
+        const resultDialog = document.getElementById('result-dialog');
+        const recipients = document.getElementById('recipients');
+        const resultTitle = document.getElementById('result-title');
+        let selectedButton;
+        let draw;
+
+        function normalizeCode(value) {
+            const digits = value.trim();
+            if (!/^[0-9]{1,16}$/.test(digits)) {
+                throw new Error('Ange en kod med 1 till 16 siffror.');
+            }
+            return BigInt(digits);
+        }
+
+        function drawRank(seed, numberOfDraws) {
+            // SplitMix64. Avvisa den sista ofullständiga gruppen före modulo.
+            const range = 1n << 64n;
+            const choices = BigInt(numberOfDraws);
+            const limit = range - range % choices;
+            let state = seed;
+            let value;
+            do {
+                state = BigInt.asUintN(64, state + 0x9e3779b97f4a7c15n);
+                value = BigInt.asUintN(64, (state ^ (state >> 30n)) * 0xbf58476d1ce4e5b9n);
+                value = BigInt.asUintN(64, (value ^ (value >> 27n)) * 0x94d049bb133111ebn);
+                value ^= value >> 31n;
+            } while (value >= limit);
+            return Number(value % choices);
+        }
+
+        const recipientPairs = participants.map((_, giver) => {
+            const pairs = [];
+            for (let first = 0; first < nameCount; first++) {
+                for (let second = first + 1; second < nameCount; second++) {
+                    if (first !== giver && second !== giver) pairs.push([first, second]);
+                }
+            }
+            return pairs;
+        });
+        const completionCounts = new Map();
+
+        // Räkna färdiga fördelningar för varje uppsättning återstående platser.
+        function countCompletions(giver, remaining) {
+            if (giver === nameCount) return 1;
+            const key = remaining.join('');
+            if (completionCounts.has(key)) return completionCounts.get(key);
+            let total = 0;
+            for (const [first, second] of recipientPairs[giver]) {
+                if (remaining[first] === 0 || remaining[second] === 0) continue;
+                remaining[first]--;
+                remaining[second]--;
+                total += countCompletions(giver + 1, remaining);
+                remaining[first]++;
+                remaining[second]++;
+            }
+            completionCounts.set(key, total);
+            return total;
+        }
+
+        // Varje möjlig helhetsfördelning motsvarar ett unikt heltal.
+        function assignmentsAt(rank) {
+            const remaining = Array(nameCount).fill(2);
+            const assignments = [];
+            for (let giver = 0; giver < nameCount; giver++) {
+                for (const [first, second] of recipientPairs[giver]) {
+                    if (remaining[first] === 0 || remaining[second] === 0) continue;
+                    remaining[first]--;
+                    remaining[second]--;
+                    const completions = countCompletions(giver + 1, remaining);
+                    if (rank < completions) {
+                        assignments.push([first, second]);
+                        break;
+                    }
+                    remaining[first]++;
+                    remaining[second]++;
+                    rank -= completions;
+                }
+            }
+            return assignments;
+        }
+
+        function buildDraw(code) {
+            const numberOfDraws = countCompletions(0, Array(nameCount).fill(2));
+            const assignments = assignmentsAt(drawRank(code, numberOfDraws));
+            const buyers = participants.map(() => []);
+            assignments.forEach((pair, giver) => pair.forEach(recipient => buyers[recipient].push(giver)));
+            return new Map(assignments.map((pair, giver) => [
+                participants[giver],
+                pair.map(recipient => ({
+                    recipient: participants[recipient],
+                    coBuyer: participants[buyers[recipient].find(buyer => buyer !== giver)]
+                }))
+            ]));
+        }
+
+        function hideDraw() {
+            participantSection.hidden = true;
+            codeError.hidden = true;
+            codeInput.removeAttribute('aria-invalid');
+            draw = undefined;
+        }
+
+        function setUpDraw() {
+            codeInput.addEventListener('input', hideDraw);
+            codeForm.addEventListener('submit', event => {
+                event.preventDefault();
+                hideDraw();
+                try {
+                    const code = normalizeCode(codeInput.value);
+                    draw = buildDraw(code);
+                    document.getElementById('active-code').textContent = 'Aktiv kod: ' + code;
+                    participantSection.hidden = false;
+                    names.firstElementChild.focus();
+                } catch (error) {
+                    codeError.textContent = error.message;
+                    codeError.hidden = false;
+                    codeInput.setAttribute('aria-invalid', 'true');
+                    codeInput.focus();
+                }
+            });
+
+            for (const name of participants) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.textContent = name;
+                button.addEventListener('click', () => {
+                    selectedButton = button;
+                    document.getElementById('selected-name').textContent = name;
+                    confirmDialog.showModal();
+                });
+                names.append(button);
+            }
+
+            document.getElementById('show-recipients').addEventListener('click', () => {
+                const giver = selectedButton.textContent;
+                resultTitle.textContent = giver + ', dina mottagare';
+                recipients.replaceChildren();
+                for (const { recipient, coBuyer } of draw.get(giver)) {
+                    const row = document.createElement('li');
+                    const name = document.createElement('strong');
+                    const note = document.createElement('span');
+                    name.textContent = recipient;
+                    note.className = 'co-buyer';
+                    note.textContent = '(' + coBuyer + ' köper också till ' + recipient + ')';
+                    row.append(name, note);
+                    recipients.append(row);
+                }
+                confirmDialog.close();
+                resultDialog.showModal();
+            });
+
+            resultDialog.addEventListener('close', () => {
+                recipients.replaceChildren();
+                resultTitle.textContent = '';
+                selectedButton.focus();
+            });
+        }
+
+        setUpDraw();
+    </script>
+</body>
+</html>
